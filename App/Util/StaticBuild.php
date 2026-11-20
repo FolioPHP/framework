@@ -56,7 +56,7 @@ final class StaticBuild
         throw $error;
       }
       if (is_dir($previous)) Store::removeTree($previous);
-      return 'Built ' . (count($routes) - 1) . ' pages and 404.html in storage/dist/.';
+      return 'Built ' . (count($routes) - 1) . ' pages and 404.html in ' . basename($storage) . '/dist/.';
     } finally {
       // Leave the previous output recoverable if rollback itself failed.
       if (!is_dir($previous)) Store::removeTree($work);
@@ -111,7 +111,7 @@ final class StaticBuild
   {
     if (!is_link($output) && !file_exists($output)) return false;
     if (!self::ownsOutput($output) || stat($output)['dev'] !== stat(dirname($output))['dev']) {
-      throw new RuntimeException('Refusing to replace storage/dist/: not a local Folio build directory.');
+      throw new RuntimeException("Refusing to replace {$output}/: not a local Folio build directory.");
     }
     return true;
   }

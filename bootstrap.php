@@ -6,18 +6,38 @@ use Framework\Core\Config;
 use Framework\Util\Cli;
 
 return static function (string $website): void {
+  $names = ['site' => 'site', 'storage' => 'storage'];
+  $config = "{$website}/roots.php";
+  $configured = file_exists($config) || is_link($config);
+  if ($configured) {
+    $custom = !is_link($config) && is_file($config) ? require $config : null;
+    if (!is_array($custom) || array_diff_key($custom, $names)) {
+      throw new RuntimeException('roots.php must be a regular file returning an array with only site and storage keys.');
+    }
+    $names = $custom + $names;
+    if ($names['site'] === $names['storage'] || !array_all($names, static fn(mixed $name) =>
+      is_string($name) && preg_match('/\A[a-z0-9][a-z0-9_-]*\z/', $name)
+      && !in_array($name, ['public', 'framework', 'vendor'], true))) {
+      throw new RuntimeException('roots.php: site and storage must be distinct, non-reserved directory names.');
+    }
+  }
   $roots = [
     'website' => $website,
     'framework' => __DIR__,
     'public' => "{$website}/public",
-    'site' => $site = "{$website}/site",
+    'site' => $site = "{$website}/{$names['site']}",
     'extend' => "{$site}/extend",
-    'storage' => "{$website}/storage",
+    'storage' => "{$website}/{$names['storage']}",
   ];
+  $frameworkRoot = strtolower(__DIR__ . '/');
+  $publicRoot = strtolower((realpath($roots['public']) ?: $roots['public']) . '/');
   foreach (['public', 'site', 'storage'] as $key) {
-    $root = realpath($roots[$key]);
-    if ($root !== false && str_starts_with(__DIR__ . '/', $root . '/')) {
-      throw new RuntimeException("Install the framework outside {$roots[$key]}.");
+    $path = $roots[$key];
+    $root = $key === 'public' ? $publicRoot : strtolower((realpath($path) ?: $path) . '/');
+    if (str_starts_with($frameworkRoot, $root)) throw new RuntimeException("Install the framework outside {$path}.");
+    if ($configured && $key !== 'public' && (is_link($path) || (file_exists($path) && !is_dir($path))
+      || str_starts_with($root, $frameworkRoot) || str_starts_with($root, $publicRoot) || str_starts_with($publicRoot, $root))) {
+      throw new RuntimeException("roots.php: {$key} must be a local directory outside public and the framework.");
     }
   }
 

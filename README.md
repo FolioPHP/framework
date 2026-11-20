@@ -550,6 +550,22 @@ Folio uses three primary configuration levels:
 - **[Site config](#site-config)** (`site/pages/config.php`) — Site-wide page defaults.
 - **[Page config](#page-config)** (`site/pages/<page>/config.php`) — Per-page overrides.
 
+### Folder Roots
+
+Optionally create `roots.php` in the website root (next to `folio`) to rename `site/` or `storage/` for both HTTP and CLI:
+
+```php
+<?php
+return [
+    'site' => 'project',
+    'storage' => 'var',
+];
+```
+
+Omitted keys keep their default names. Use distinct directory names starting with a lowercase letter or digit and containing only lowercase letters, digits, hyphens, or underscores. These directories cannot be symlinks or overlap the framework or `public/`. The document root and page URLs do not change.
+
+Move existing files to the new directories yourself. If you use a deployment allowlist, include `roots.php` and the renamed site directory, keep runtime storage out of the upload, and update your ignore rules to match.
+
 ### Project Config
 
 `site/project.php` controls runtime and system-level behavior.

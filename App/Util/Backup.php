@@ -44,6 +44,7 @@ final class Backup
       $excluded = ["{$roots['public']}/generated-assets", "{$roots['public']}/generated-images"];
       foreach (['public', 'site'] as $name) {
         $source = $roots[$name];
+        $name = basename($source);
         if (is_link($source) || !$zip->addEmptyDir($name)) return false;
         $dir = new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS);
         $filter = new RecursiveCallbackFilterIterator($dir, static fn(SplFileInfo $item) =>
@@ -56,7 +57,9 @@ final class Backup
           if (!($file->isDir() ? $zip->addEmptyDir($entry) : $zip->addFile($pathInSource, $entry))) return false;
         }
       }
-      foreach (['folio', 'folio.ref'] as $name) {
+      $websiteFiles = ['folio', 'folio.ref'];
+      if (is_file("{$roots['website']}/roots.php")) $websiteFiles[] = 'roots.php';
+      foreach ($websiteFiles as $name) {
         $source = "{$roots['website']}/{$name}";
         if (is_link($source) || !is_file($source) || !$zip->addFile($source, $name)) return false;
       }

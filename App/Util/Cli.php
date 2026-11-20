@@ -15,14 +15,14 @@ final class Cli
       dev [on|off]                  Show or set development mode
       performance-monitor [on|off]  Show or set the performance monitor
       create page <path>            Create a page folder and missing parents (dev only)
-      create component <name>       Create a component in site/components (dev only)
-      create gallery <name>         Create a global gallery in site/assets/images (dev only)
-      create content-type <name>    Create a content type in site/content (dev only)
-      create template <name>        Create a global template in site/templates (dev only)
-      create page-type <Name>       Create a Page subclass under site/extend/Page
-      build                         Regenerate the static site in storage/dist/
+      create component <name>       Create a component folder (dev only)
+      create gallery <name>         Create a global gallery folder (dev only)
+      create content-type <name>    Create a content type folder (dev only)
+      create template <name>        Create a global template folder (dev only)
+      create page-type <Name>       Create a Page subclass
+      build                         Regenerate the static site
       clear cache                   Clear cached HTML and image metadata
-      backup                        Create a ZIP in storage/backups/
+      backup                        Create a ZIP backup
       --help                        Show this help
     TEXT;
 
@@ -71,7 +71,7 @@ final class Cli
     if ($args === ['backup']) {
       $archive = Backup::archive($roots);
       if (!$archive) throw new RuntimeException('Backup failed. Check the backups directory for a same-name ZIP or write errors.');
-      return 'Created storage/backups/' . basename($archive);
+      return 'Created ' . basename($roots['storage']) . '/backups/' . basename($archive);
     }
 
     if (count($args) === 3 && $args[0] === 'create') {
@@ -120,7 +120,7 @@ final class Cli
 
     Store::checkWritePath($parent);
     mkdir($parent, 0755, true);
-    return "Created site/{$base}/{$path}/. Reload in dev mode to scaffold.";
+    return 'Created ' . basename($roots['site']) . "/{$base}/{$path}/. Reload in dev mode to scaffold.";
   }
 
   private static function checkDirectory(string $root, string $path): void
@@ -164,6 +164,6 @@ final class Cli
     $file = fopen("{$dir}/{$name}.php", 'xb');
     if (fwrite($file, $source) !== strlen($source)) throw new RuntimeException("Could not write {$name}.php");
     fclose($file);
-    return "Created site/extend/Page/{$name}.php. Set 'type' => '" . lcfirst($name) . "' in the page config.";
+    return 'Created ' . basename($roots['site']) . "/extend/Page/{$name}.php. Set 'type' => '" . lcfirst($name) . "' in the page config.";
   }
 }
