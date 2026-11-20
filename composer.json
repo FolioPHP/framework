@@ -1,0 +1,14 @@
+{
+    "name": "foliophp/framework",
+    "description": "A lightweight, flat-file PHP framework for multilingual websites.",
+    "type": "library",
+    "license": "Apache-2.0",
+    "require": {
+        "php": "^8.5",
+        "ext-gd": "*",
+        "ext-mbstring": "*"
+    },
+    "suggest": {
+        "ext-zip": "Required to create ZIP backups."
+    }
+}
