@@ -170,6 +170,31 @@ final class Store
     }
   }
 
+  private static function sharedFields(array $defaults): array
+  {
+    $shared = [];
+    foreach ($defaults as $key => $value) {
+      if (str_starts_with((string) $key, '_')) $shared[substr($key, 1)] = $value;
+    }
+    return $shared;
+  }
+
+  private static function resolveLangFields(array $fields, array $defaults, array $shared): array
+  {
+    foreach ($defaults as $key => $value) {
+      if (($fields[$key] ?? '') === '' || str_starts_with((string) $key, '_')) $fields[$key] = $value;
+    }
+    return array_replace($fields, $shared);
+  }
+
+  public static function loadLangFields(string $path, string $lang, string $format): array
+  {
+    $default = Config::get()->defaultLang;
+    $defaults = self::loadFile("{$path}/{$default}.{$format}");
+    $fields = $lang === $default ? $defaults : self::loadFile("{$path}/{$lang}.{$format}");
+    return self::resolveLangFields($fields, $defaults, self::sharedFields($defaults));
+  }
+
   public static function loadFields(
     string $path,
     string $lang,
@@ -181,9 +206,9 @@ final class Store
   ): array {
     $config = Config::get();
     $defName = $isTemplate ? 'fields' : $config->defaultLang;
-    $targetPath = "{$path}/" . ($isTemplate ? 'fields' : $lang) . ".{$format}";
-
-    if (!$config->isDevMode) return self::loadFile($targetPath);
+    if (!$config->isDevMode) {
+      return $isTemplate ? self::loadFile("{$path}/{$defName}.{$format}") : self::loadLangFields($path, $lang, $format);
+    }
 
     $files = $files ?: self::filesMap($path);
     $tplFields = $templateFiles
@@ -193,14 +218,16 @@ final class Store
     $defFile = "{$defName}.{$format}";
     $defPath = "{$path}/{$defFile}";
     $existing = self::loadFileByName($defName, $files, $format);
-    $fields = self::sync($existing, self::sync($blueprint, $tplFields));
+    $defaults = self::sync($blueprint, $tplFields);
+    if (!$isTemplate) $defaults = array_diff_key($defaults, self::sharedFields($existing + $defaults));
+    $fields = self::sync($existing, $defaults);
     if (!isset($files[$defFile]) || $fields !== $existing) {
       self::writeFile($defPath, $fields);
     }
 
     if (!$isTemplate) {
       $byLang = self::syncLangFiles($path, [$defFile => $defPath, ...$files], $format, $fields);
-      $fields = $byLang[$lang] ?? self::loadFile($targetPath);
+      $fields = $byLang[$lang] ?? self::loadLangFields($path, $lang, $format);
     }
 
     self::archiveUnusedFormats($path, $files, $format);
@@ -211,7 +238,13 @@ final class Store
   {
     $config = Config::get();
     $defData ??= self::loadFileByName($config->defaultLang, $files, $format);
-    $byLang = [$config->defaultLang => $defData];
+    $shared = $commentMissing ? [] : self::sharedFields($defData);
+    $byLang = [$config->defaultLang => array_replace($defData, $shared)];
+    $source = $commentMissing ? $defData : array_filter(
+      array_diff_key($defData, $shared),
+      static fn(int|string $key) => !str_starts_with((string) $key, '_'),
+      ARRAY_FILTER_USE_KEY,
+    );
 
     foreach ($config->supportedLangs as $lang) {
       $targetFile = "{$lang}.{$format}";
@@ -231,7 +264,8 @@ final class Store
           $fields[array_key_exists($name, $defData) ? $name : "# {$name}"] = $value;
         }
       }
-      $byLang[$lang] = $synced = self::sync($fields, $defData, prune: !$commentMissing);
+      $synced = self::sync($fields, $source, prune: !$commentMissing);
+      $byLang[$lang] = $commentMissing ? $synced : self::resolveLangFields($synced, $defData, $shared);
       if (!isset($files[$targetFile]) || $synced !== $existing) {
         self::writeFile($targetPath, $synced);
       }

@@ -117,7 +117,7 @@ final class Component implements Stringable
   {
     $fmt = $this->definition['format'];
     $defPath = $this->definition['path'];
-    $defaults = self::$contentCache["{$defPath}:{$lang}"] ??= Store::loadFile("{$defPath}/{$lang}.{$fmt}");
+    $defaults = self::$contentCache["{$defPath}:{$lang}"] ??= Store::loadLangFields($defPath, $lang, $fmt);
 
     if ($this->contentId === null) return $defaults;
 

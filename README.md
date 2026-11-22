@@ -493,7 +493,12 @@ $total  = $page->children()->count();
 
 ### Language Files & Slugs
 
-Each page and content item stores translations in per-language files (`en.txt`, `de.txt`, etc.), loaded automatically based on the active request language.
+Pages, site fields, content items, and components use per-language content files (`en.txt`, `de.txt`, etc.). The same rules apply to TXT, PHP, and JSON files:
+
+- **Shared fields:** Define `_title: My title` in the `default_lang` file and read it as `$page->title` in every language. The shared value takes precedence over a plain `title` in the corresponding files. Dev sync omits both keys from secondary files and removes any existing copies.
+- **Translation fallback:** If a key is missing, is an empty string (e.g. `Title:`), or is `null`, Folio uses that key’s default-language value, even if the translation file is missing. Fallback is per field, not per array entry. `0`, `"0"`, `false`, and `[]` are kept.
+
+Dev sync copies default-language values into new translation entries and leaves existing entries unchanged, even if blank. Clear a copied value to make it follow the default language at render time.
 
 Pages define localized URL slugs in their `config.php`:
 
