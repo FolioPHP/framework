@@ -1,4 +1,3 @@
-# FolioPHP
 
 Folio is a lightweight, file-based PHP framework for multilingual websites with reusable components and no external PHP dependencies. Use `php folio build` to export your site for [static hosting](#static-site-generator) without running PHP in production.
 
@@ -557,19 +556,22 @@ Folio uses three primary configuration levels:
 
 ### Folder Roots
 
-Optionally create `roots.php` in the website root (next to `folio`) to rename `site/` or `storage/` for both HTTP and CLI:
+Folio defaults to `site/` and `storage/` next to `public/`. To rename either, pass an optional `roots` array in `public/index.php`:
 
 ```php
 <?php
-return [
-    'site' => 'project',
-    'storage' => 'var',
-];
+$base = dirname(__DIR__);
+(require $base . '/framework/bootstrap.php')($base, [
+  'roots' => [
+    'site' => $base . '/project',
+    'storage' => $base . '/var',
+  ],
+]);
 ```
 
-Omitted keys keep their default names. Use distinct directory names starting with a lowercase letter or digit and containing only lowercase letters, digits, hyphens, or underscores. These directories cannot be symlinks or overlap the framework or `public/`. The document root and page URLs do not change.
+Omit the array or either key to use its default. Paths must be absolute and point to distinct directories directly inside the project, with names starting with a lowercase letter or digit and containing only lowercase letters, digits, hyphens, or underscores. They cannot be symlinks or overlap the framework or `public/`. The document root and page URLs do not change.
 
-Move existing files to the new directories yourself. If you use a deployment allowlist, include `roots.php` and the renamed site directory, keep runtime storage out of the upload, and update your ignore rules to match.
+For CLI commands to share these roots, the `folio` shim must call `require __DIR__ . '/public/index.php';`. If migrating from `roots.php`, move its overrides here and remove the old file; Folio no longer reads it. If you rename `site/`, update any deployment allowlist and ignore rules, and keep runtime storage out of the upload.
 
 ### Project Config
 

@@ -57,9 +57,7 @@ final class Backup
           if (!($file->isDir() ? $zip->addEmptyDir($entry) : $zip->addFile($pathInSource, $entry))) return false;
         }
       }
-      $websiteFiles = ['folio', 'folio.ref'];
-      if (is_file("{$roots['website']}/roots.php")) $websiteFiles[] = 'roots.php';
-      foreach ($websiteFiles as $name) {
+      foreach (['folio', 'folio.ref'] as $name) {
         $source = "{$roots['website']}/{$name}";
         if (is_link($source) || !is_file($source) || !$zip->addFile($source, $name)) return false;
       }

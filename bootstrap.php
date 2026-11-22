@@ -5,22 +5,21 @@ use Framework\Core\App;
 use Framework\Core\Config;
 use Framework\Util\Cli;
 
-return static function (string $website): void {
+return static function (string $website, array $options = []): void {
   $names = ['site' => 'site', 'storage' => 'storage'];
-  $config = "{$website}/roots.php";
-  $configured = file_exists($config) || is_link($config);
-  if ($configured) {
-    $custom = !is_link($config) && is_file($config) ? require $config : null;
-    if (!is_array($custom) || array_diff_key($custom, $names)) {
-      throw new RuntimeException('roots.php must be a regular file returning an array with only site and storage keys.');
-    }
-    $names = $custom + $names;
-    if ($names['site'] === $names['storage'] || !array_all($names, static fn(mixed $name) =>
-      is_string($name) && preg_match('/\A[a-z0-9][a-z0-9_-]*\z/', $name)
-      && !in_array($name, ['public', 'framework', 'vendor'], true))) {
-      throw new RuntimeException('roots.php: site and storage must be distinct, non-reserved directory names.');
-    }
+  $custom = array_key_exists('roots', $options) ? $options['roots'] : [];
+  if (!is_array($custom) || array_diff_key($custom, $names)) {
+    throw new RuntimeException('The roots option must be an array with only site and storage keys.');
   }
+  foreach ($custom as $key => $path) {
+    $name = is_string($path) ? basename($path) : '';
+    if ($path !== "{$website}/{$name}" || !preg_match('/\A[a-z0-9][a-z0-9_-]*\z/', $name)
+      || in_array($name, ['public', 'framework', 'vendor'], true)) {
+      throw new RuntimeException("The {$key} root must be a non-reserved directory directly inside the project.");
+    }
+    $names[$key] = $name;
+  }
+  if ($names['site'] === $names['storage']) throw new RuntimeException('The site and storage roots must be distinct.');
   $roots = [
     'website' => $website,
     'framework' => __DIR__,
@@ -35,9 +34,9 @@ return static function (string $website): void {
     $path = $roots[$key];
     $root = $key === 'public' ? $publicRoot : strtolower((realpath($path) ?: $path) . '/');
     if (str_starts_with($frameworkRoot, $root)) throw new RuntimeException("Install the framework outside {$path}.");
-    if ($configured && $key !== 'public' && (is_link($path) || (file_exists($path) && !is_dir($path))
+    if ($custom !== [] && $key !== 'public' && (is_link($path) || (file_exists($path) && !is_dir($path))
       || str_starts_with($root, $frameworkRoot) || str_starts_with($root, $publicRoot) || str_starts_with($publicRoot, $root))) {
-      throw new RuntimeException("roots.php: {$key} must be a local directory outside public and the framework.");
+      throw new RuntimeException("The {$key} root must be a local directory outside public and the framework.");
     }
   }
 
