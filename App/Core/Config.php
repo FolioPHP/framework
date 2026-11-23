@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Framework\Core;
 
 use LogicException;
-use RuntimeException;
 
 final class Config
 {
@@ -44,10 +43,9 @@ final class Config
 
     $configPath = "{$this->sitePath}/project.php";
     $existing = is_file($configPath) ? Store::loadFile($configPath) : null;
-    if ($this->isStaticBuild && $existing === null) throw new RuntimeException("Missing required config: {$configPath}");
     $this->isDevMode = !$this->isStaticBuild && (bool) ($existing['dev_mode'] ?? true);
 
-    $siteConfig = Store::syncConfig($configPath, $this->isDevMode || $existing === null ? [
+    $siteConfig = Store::syncConfig($configPath, [
       'supported_langs' => ['en', 'de'],
       'default_lang' => 'en',
       'dev_mode' => true,
@@ -57,7 +55,7 @@ final class Config
       'minify_code' => true,
       'backup' => false,
       'backup_interval' => 7,
-    ] : [], $this->isDevMode, $existing);
+    ], $this->isDevMode, $existing);
 
     $this->supportedLangs = $siteConfig['supported_langs'];
     $this->defaultLang = $siteConfig['default_lang'];

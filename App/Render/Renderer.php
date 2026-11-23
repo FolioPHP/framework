@@ -43,21 +43,17 @@ final class Renderer
     // Phase 1: render body first so rendered components register their CSS/JS
     ob_start();
     if ($pageConfig['show_header']) {
-      echo "<header>\n";
-      if (isset($pageFiles['header.php'])) self::includeTemplate($pageFiles['header.php'], $ctx);
-      else echo $components->header;
-      echo "</header>\n";
+      echo self::wrap('header', isset($pageFiles['header.php'])
+        ? self::renderTemplate($pageFiles['header.php'], $ctx)
+        : (string) $components->header);
     }
     if ($templateFile = $templateFiles['template.php'] ?? $pageFiles['template.php'] ?? null) {
-      echo "<main>\n";
-      self::includeTemplate($templateFile, $ctx);
-      echo "\n</main>\n";
+      echo self::wrap('main', self::renderTemplate($templateFile, $ctx));
     }
     if ($pageConfig['show_footer']) {
-      echo "<footer>\n";
-      if (isset($pageFiles['footer.php'])) self::includeTemplate($pageFiles['footer.php'], $ctx);
-      else echo $components->footer;
-      echo "\n</footer>";
+      echo self::wrap('footer', isset($pageFiles['footer.php'])
+        ? self::renderTemplate($pageFiles['footer.php'], $ctx)
+        : (string) $components->footer);
     }
     $body = ob_get_clean();
 
@@ -85,7 +81,7 @@ final class Renderer
       . self::renderDeferred('js', $config)
       . self::renderGlobalAsset('js', 'globalJS', 'external', $config);
 
-    $html = "{$head}{$assets}\n</head>\n<body>\n{$body}\n</body>\n</html>";
+    $html = "{$head}{$assets}</head>\n<body>\n{$body}</body>\n</html>\n";
 
     if ($config->minify) {
       $html = Minifier::minifyHTML($html);
@@ -138,6 +134,15 @@ final class Renderer
     return ob_get_clean();
   }
 
+  private static function wrap(string $tag, string $content, string $indent = ''): string
+  {
+    if ($content === '') return "{$indent}<{$tag}></{$tag}>\n";
+
+    $start = str_starts_with($content, "\n") || str_starts_with($content, "\r") ? '' : "\n";
+    $end = str_ends_with($content, "\n") || str_ends_with($content, "\r") ? '' : "\n";
+    return "{$indent}<{$tag}>{$start}{$content}{$end}{$indent}</{$tag}>\n";
+  }
+
   private static function includeTemplate(string $__file, array $__context): void
   {
     extract($__context);
@@ -176,7 +181,7 @@ final class Renderer
     return self::buildAssetTag(implode("\n", array_map('file_get_contents', $files)), $id, $format, $mode);
   }
 
-  private static function renderGlobalAsset(string $type, string $filename, string $mode, Config $config): string
+  private static function renderGlobalAsset(string $type, string $filename, string $mode, Config $config, string $indent = '  '): string
   {
     $path = "{$config->sitePath}/assets/{$type}/{$filename}.{$type}";
     if ($config->isDevMode && !is_file($path)) {
@@ -187,7 +192,7 @@ final class Renderer
     $id = self::assetId($path);
     if (!self::markEmitted($id, $type)) return '';
 
-    return self::buildAssetTag(file_get_contents($path), $id, $type, $mode);
+    return self::buildAssetTag(file_get_contents($path), $id, $type, $mode, $indent);
   }
 
   private static function renderDeferred(string $type, Config $config): string
@@ -203,14 +208,15 @@ final class Renderer
   {
     return static function (string $filename, ?string $modeOverwrite = null) use ($type, $defaultMode, $config): void {
       if (($modeOverwrite ?? $defaultMode) === 'inline') {
-        echo self::renderGlobalAsset($type, $filename, 'inline', $config);
+        $tag = self::renderGlobalAsset($type, $filename, 'inline', $config, indent: '');
+        if ($tag !== '') echo "\n{$tag}";
       } else {
         self::$deferredAssets[$type][$filename] = true;
       }
     };
   }
 
-  private static function buildAssetTag(string $content, string $id, string $format, string $mode): string
+  private static function buildAssetTag(string $content, string $id, string $format, string $mode, string $indent = '  '): string
   {
     if (trim($content) === '') return '';
 
@@ -219,7 +225,7 @@ final class Renderer
 
     if ($mode === 'inline') {
       $out = $config->minify ? $minify($content) : $content;
-      return $format === 'css' ? "\n<style>\n{$out}\n</style>\n" : "\n<script>\n{$out}\n</script>\n";
+      return self::wrap($format === 'css' ? 'style' : 'script', $out, $indent);
     }
 
     $publicFolder = "{$config->publicPath}/generated-assets";
@@ -233,8 +239,8 @@ final class Renderer
 
     $url = "/generated-assets/{$filename}";
     return $format === 'css'
-      ? "\n<link rel=\"stylesheet\" href=\"{$url}\">"
-      : "\n<script src=\"{$url}\" defer></script>";
+      ? "{$indent}<link rel=\"stylesheet\" href=\"{$url}\">\n"
+      : "{$indent}<script src=\"{$url}\" defer></script>\n";
   }
 
   private static function assetId(string $path): string

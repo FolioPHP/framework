@@ -1,9 +1,10 @@
 
-Folio is a lightweight, file-based PHP framework for multilingual websites with reusable components and no external PHP dependencies. Use `php folio build` to export your site for [static hosting](#static-site-generator) without running PHP in production.
+Folio is a lightweight, dependency-free, file-based PHP framework and static site generator for multilingual websites with an intuitive API and flexible content management.
 
 ## Table of Contents
 
 - [Introduction](#introduction)
+- [Quickstart](#quickstart)
 - [Pages](#pages)
 - [Content](#content)
 - [Fields](#fields)
@@ -26,14 +27,63 @@ FolioPHP is designed to simplify and speed up building portfolios, brochure site
 ### Core Concepts
 
 - **Everything lives in `site/`:** All project content, templates, components, assets, and configuration are stored in the `site/` directory. For a standard project, you rarely need to touch anything outside it.
+- **Everything is a folder**: To create a page, create a folder inside `pages/`. Creating a new component is as easy as creating a folder inside `components/`. The same applies to all kinds of content.
 - **Auto-scaffolding in dev mode:** Creating an empty folder for a page, content type, or component automatically generates its boilerplate files on the next request.
-- **Resetting a project:** Delete the `site/` folder and reload the page to generate a fresh project structure. To clear all caches and generated files as well, delete `/cache`, `public/generated-assets`, and `public/generated-images`.
+- **Clearing the cache:** Run `php folio clear cache` to remove cached HTML and image metadata from `storage/cache/` without deleting source files or generated assets.
+
+---
+
+## Quickstart
+
+**Requirements:** PHP 8.5 with `gd` and `mbstring`. Backups also require `zip`. Composer is not needed to run Folio.
+
+From a new project directory:
+
+```sh
+git clone https://github.com/FolioPHP/framework.git framework
+mkdir -p public site
+```
+
+Create `site/project.php` to leave minification off while the minifiers are unfinished. The first dev request fills in the other defaults:
+
+```php
+<?php
+return ['minify_code' => false];
+```
+
+Create `public/index.php`:
+
+```php
+<?php
+(require dirname(__DIR__) . '/framework/bootstrap.php')(dirname(__DIR__));
+```
+
+Create `folio` next to `public/`:
+
+```php
+<?php
+require __DIR__ . '/public/index.php';
+```
+
+Start the local server from the project root:
+
+```sh
+php -S localhost:8000 -t public
+```
+
+Open [http://localhost:8000/](http://localhost:8000/) once to scaffold `site/`, then add `site/pages/home/template.php` and reload:
+
+```php
+<h1><?= htmlspecialchars((string) $page->title, ENT_QUOTES, 'UTF-8') ?></h1>
+```
 
 ---
 
 ## Pages
 
 Pages are represented by folders inside `site/pages/`. Creating a new page is as simple as creating a new folder.
+
+`site/pages/home/` serves `/` and the localized home URLs (e.g., `/de`). `site/pages/error/` renders HTTP 404 responses and is not directly routable.
 
 ### Key Features
 
@@ -44,8 +94,9 @@ Pages are represented by folders inside `site/pages/`. Creating a new page is as
 - **Ignored folders:** Prefix a folder with `_` (e.g., `_notes`) to prevent it from being parsed as a page.
 - **Page-scoped files:**
   - Add any `.css` or `.js` file inside a page folder to include page-specific styles or scripts.
-  - Add `header.php` or `footer.php` to override the site defaults for that page.
+  - Add `header.php` or `footer.php` to override the default `header` or `footer` component for that page. Use `show_header` or `show_footer` to disable either region.
   - Add `template.php` to define a custom template for that page.
+- **Document metadata:** Set `meta_title` and `meta_description` in the page's language files to populate the document title and meta description.
 - **Active states:** `$page->isActive()` is `true` only on the currently rendered page, while `$page->hasActiveChild()` is `true` if any descendant is active:
   ```php
   <a href="<?= $page->url() ?>" <?= $page->isActive() || $page->hasActiveChild() ? 'aria-current="page"' : '' ?>>Home</a>
@@ -53,21 +104,21 @@ Pages are represented by folders inside `site/pages/`. Creating a new page is as
 
 ### Page Controllers
 
-Add a `controller.php` file to any page folder to run logic during the `Page` object's construction. `$this` is the page; use `fields()` to update raw values.
+Add a `controller.php` file to run logic when the page's fields are first loaded: during construction in dev mode, on demand in production. An HTML cache hit can skip the controller. `$this` is the page; use `fields()` to update raw values. Add the example below to a page after defining a `text` field.
 
 ```php
-// site/pages/home/controller.php
 <?php
+declare(strict_types=1);
+
 $wordCount = str_word_count($this->fields()['text']);
 $this->fields()['read_time'] = ceil($wordCount / 200);
 ```
 
 ### Custom Page Types
 
-Place `Page` subclasses inside `extend/Page/` under the `Extend\Page` namespace to define custom blueprints, routing flags, or methods without modifying `/app`. Activate a type by setting `'type'` in a page's `config.php`. You can also use the CLI command `php folio create page-type Article` to scaffold this.
+Place `Page` subclasses inside `site/extend/Page/` under the `Extend\Page` namespace to define custom blueprints, routing flags, or methods without modifying `framework/App/`. Activate a type by setting `'type'` in a page's `config.php`. You can also use `php folio create page-type Article` to create the class file.
 
 ```php
-// extend/Page/Article.php
 <?php
 declare(strict_types=1);
 
@@ -155,13 +206,13 @@ site/content/
 
 Content items support [direct images and galleries](#images). Pages support direct images only. Both support [field modifiers](#field-modifiers) and [collection queries](#collection-methods).
 
-Content item IDs include the type. For example, `site/content/01_team/02_victor/` has the ID `team/victor`. Item folders do not need a `config.php`; format is set at the content-type level.
+Content item IDs include the type. For example, `site/content/01_team/02_victor/` has the ID `team/victor`.
 
 ---
 
 ## Fields
 
-Fields store structured, language-synced content. Folio supports three storage formats:
+Fields store language-synced content. Folio supports three storage formats:
 
 1. **`.txt` (Default):** Human-friendly custom syntax (`en.txt`).
 2. **`.php`:** Native PHP arrays (`en.php`) — most performant and flexible.
@@ -171,7 +222,7 @@ Set the default page field format in `site/pages/config.php`. Change a page's ef
 
 ### The `.txt` Format
 
-Fields are separated by a line of dashes (`-------`). Arrays use standard JSON syntax.
+Fields are separated by a line of dashes (`-------`). Arrays use standard JSON syntax. Scalar values are strings in `.txt` (`true` means the string `'true'`); use PHP or JSON to store typed scalars such as booleans.
 
 ```text
 title: Welcome to the Homepage
@@ -193,7 +244,7 @@ If there is no exact match, underscores fall back to hyphens: `$pages->about_us`
 
 ### Field Modifiers
 
-Fields return `Field` objects that support chainable modifiers:
+Page, site, and content-item field properties return `Field` objects that support modifiers. Component field properties return raw values.
 
 ```php
 $page->title->uppercase()
@@ -207,7 +258,7 @@ See [Field Methods](#field-methods) in the API Reference for the full list.
 
 ### Fields and framework methods
 
-On `Page`, `Site`, `ContentItem`, and `Component`, properties read user fields; no framework names are reserved. Use methods for metadata and containers. For example, `$page->url` is a field, `$page->url()` is its current URL, and `$page->fields()['url']` reads the raw value. Keep custom page-type state non-public to preserve this contract.
+On `Page`, `Site`, `ContentItem`, and `Component`, properties read user fields. Use methods for metadata and containers. For example, `$page->url` is a field, `$page->url()` is its current URL, and `$page->fields()['url']` reads the raw value.
 
 ---
 
@@ -243,6 +294,8 @@ Create a named folder inside `site/templates/` (e.g., `site/templates/blog-layou
 ## Components
 
 Components are reusable UI blocks rendered via `$components`. You can create a component folder manually under `site/components/` or scaffold it automatically in dev mode by calling `$components->new_component` in a template. Components can be nested inside one another.
+
+The component's `config.php` uses `content_format` (`txt`, `php`, or `json`) and `render_assets` (`external` or `inline`). Keep component CSS and JS alongside `template.php`; Folio includes those assets when it renders the component.
 
 Inside a component's template, access fields and overrides through the `$component` object:
 
@@ -316,13 +369,13 @@ Images are processed and cached in `public/generated-images/` and served in the 
 
 File extensions and order prefixes (`01_`) are optional when referencing images—`$image('photo')` matches `01_photo.jpg`.
 
-| Scope | Source Path | Helper Syntax |
-|---|---|---|
-| Global | `site/assets/images/` | `$image('photo')`, `$images->photo`, `$gallery('projects')`, `$galleries->projects` |
-| Page-scoped | `site/pages/<page>/` | `$page->image('cover')`, `$page->images()->cover` |
+| Scope          | Source Path                   | Helper Syntax                                                                                                                               |
+| -------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Global         | `site/assets/images/`         | `$image('photo')`, `$images->photo`, `$gallery('projects')`, `$galleries->projects`                                                         |
+| Page-scoped    | `site/pages/<page>/`          | `$page->image('cover')`, `$page->images()->cover`                                                                                           |
 | Content-scoped | `site/content/<type>/<item>/` | `$content('team')->victor->image('portrait')`, `$content->team->victor->images()->portrait`, `$content('team')->victor->gallery('gallery')` |
 
-Page and content-item `image()` and `images()` read direct files only. A page’s `images/` folder is an ordinary child page, not a media folder. Use global galleries for page image sets. Every immediate subfolder of a content item is a gallery, including folders named `images` or `gallery`.
+Page and content-item `image()` and `images()` read direct files only. A page’s `images/` folder is an ordinary child page, not a media folder. Use global galleries for page image sets. Every immediate subfolder of a content item or inside `site/assets/images/` is a gallery, including folders named `images` or `gallery`.
 
 #### Rendering Images
 
@@ -394,14 +447,13 @@ In dev mode, `site/assets/images/` and each immediate gallery subfolder automati
 ```php
 // Read plain text for the current language
 $alt = $image('cover-photo')->alt;
-$alt = $images->{'cover-photo'}->alt;
-$alt = $galleries->{'summer-trip'}->{'cover-photo'}->alt;
+$alt = $images->cover_photo->alt;
+$alt = $galleries->summer_trip->cover_photo->alt;
 
 // Override for a single render
 <?= $image('photo')->alt('A mountain at sunset') ?>
 <?= $image('photo')->alt(en: 'A mountain at sunset', de: 'Ein Berg bei Sonnenuntergang') ?>
 <?= $gallery('projects')->image('photo')->alt(en: 'Bridge', de: 'Brücke') ?>
-<?= $image('photo')->alt('') ?> // Explicitly decorative
 ```
 
 Rendered HTML escapes alt text automatically. An empty global/gallery entry renders `alt=""`. Named language overrides fall back to the first supplied value if the current language is missing. Page- and content-scoped images do not generate alt files; without an inline override, their `alt` attribute is omitted.
@@ -464,15 +516,17 @@ $page->children()->reverse()            // Reverses by publish_date or order
 $site->children()->ordered()->reverse() // Ordered pages only, reversed
 $page->children()->shuffle()
 
-// Filtering by field values
+// Filtering by field values (scalar matches are strict)
 $page->children()->status('published')
 $page->children()->category('photography')
 $page->children()->category(['web', 'design']) // Must match all listed values
-$page('portfolio')->children()->featured('true')->shuffle()->limit(5)
+$page('portfolio')->children()->featured('true')->shuffle()->limit(5) // TXT flag
 
-// Custom callback filtering
-$page->children()->filter(fn($p) => $p->publish_date > '2024-01-01')
-$page->children()->filter(fn($p) => $p->featured && !$p->archived)
+// Compare raw values in callbacks, not Field objects
+$page->children()->filter(fn($p) => ($p->fields()['publish_date'] ?? '') >= '2024-01-01')
+$page->children()->filter(fn($p) =>
+    ($p->fields()['featured'] ?? false) === true && ($p->fields()['archived'] ?? false) === false
+) // PHP/JSON boolean flags
 
 // Combining queries
 $page('blog')->children()->category('tech')->reverse()->limit(3)
@@ -492,12 +546,7 @@ $total  = $page->children()->count();
 
 ### Language Files & Slugs
 
-Pages, site fields, content items, and components use per-language content files (`en.txt`, `de.txt`, etc.). The same rules apply to TXT, PHP, and JSON files:
-
-- **Shared fields:** Define `_title: My title` in the `default_lang` file and read it as `$page->title` in every language. The shared value takes precedence over a plain `title` in the corresponding files. Dev sync omits both keys from secondary files and removes any existing copies.
-- **Translation fallback:** If a key is missing, is an empty string (e.g. `Title:`), or is `null`, Folio uses that key’s default-language value, even if the translation file is missing. Fallback is per field, not per array entry. `0`, `"0"`, `false`, and `[]` are kept.
-
-Dev sync copies default-language values into new translation entries and leaves existing entries unchanged, even if blank. Clear a copied value to make it follow the default language at render time.
+Pages, site fields, content items, and components use per-language files (`en.txt`, `de.txt`, etc.). A missing, null, or empty-string field falls back to the default-language value. Prefix a key in the default-language file with `_` (e.g., `_price`) to expose the same `price` value in every language.
 
 Pages define localized URL slugs in their `config.php`:
 
@@ -585,11 +634,15 @@ For CLI commands to share these roots, the `folio` shim must call `require __DIR
 | `performance_monitor` | Enables request timings in the server log and `Server-Timing` HTTP header. |
 | `caching` | Global HTML caching switch for production. Caches only pages with caching enabled. |
 | `minify_code` | Enables/disables HTML, CSS, and JS minification. |
-| `backup` | Enables/disables automatic backups in `backups/`. |
+| `backup` | Enables/disables automatic backups in `storage/backups/`. |
 | `backup_interval` | Days between automatic backups. |
 | `image_quality` | Preset (`low`, `medium`, `high`), dynamically mapped per image format. |
 
-The PHP deployment workflow turns off `dev_mode` in the uploaded copy. Scaffold and commit required source files before deploying; missing required configs are not created in production.
+With minification off, Folio preserves template and component output as written. It adds line breaks only to separate the document tags it generates around that output.
+
+On a PHP host, set the document root to `public/`, serve existing public files directly, and route other requests to `public/index.php`. Scaffold and deploy the required source files before turning `dev_mode` off; production does not create missing required configs.
+
+Even with dev mode off, the PHP process needs write access to `public/generated-assets/`, `public/generated-images/`, and the relevant `storage/` paths when generating assets, writing caches, or creating backups.
 
 #### Performance Monitor
 
@@ -632,15 +685,16 @@ Run `php folio` or `php folio --help` from the project root to list available co
 | `php folio create gallery summer-trip` | Create `site/assets/images/summer-trip/`. |
 | `php folio create content-type projects` | Create `site/content/projects/`. |
 | `php folio create template blog-layout` | Create `site/templates/blog-layout/`. |
-| `php folio create page-type Article` | Create `extend/Page/Article.php` (use with `'type' => 'article'`). |
-| `php folio build` | Export the [static site](#static-site-generator) for all languages into `dist/`. |
+| `php folio create page-type Article` | Write `site/extend/Page/Article.php` immediately (use with `'type' => 'article'`). |
+| `php folio build` | Export the [static site](#static-site-generator) for all languages into `storage/dist/`. |
 | `php folio clear cache` | Delete cached HTML and image metadata while keeping generated CSS, JS, and images. |
-| `php folio backup` | Create a ZIP archive in `backups/` immediately (requires PHP's `zip` extension). |
+| `php folio backup` | Create a ZIP archive in `storage/backups/` immediately (requires PHP's `zip` extension). |
 
 **Notes:**
-- `create` commands require `dev_mode` and create empty directories; the next dev request scaffolds their files. Names must use lowercase letters and digits with `-` or `_` separators. Page creation rejects duplicate sibling names even when order prefixes differ.
+- Folder-creation commands require `dev_mode` and create empty directories; the next dev request scaffolds their files. Names must use lowercase letters and digits with `-` or `_` separators. Page creation rejects duplicate sibling names even when order prefixes differ. `create page-type` does not require dev mode.
 - Generated CSS and JS versions are kept so cached pages can still load them. After a deployment or content change, run `php folio clear cache` to refresh cached HTML without deleting assets. Older versions accumulate until deliberately cleaned up.
-- Backups exclude `.git`, `backups`, `cache`, `generated-assets`, `generated-images`, the static build output (`dist/`), and symlinks.
+- Backups include the site root, `public/`, and the required `folio` and `folio.ref` files. They omit the framework, runtime storage, `.git`, public generated assets and images, and symlinks.
+- Cache, backups, and static builds follow the [configured storage root](#folder-roots); the paths shown here use the default.
 
 ---
 
@@ -648,31 +702,31 @@ Run `php folio` or `php folio --help` from the project root to list available co
 
 ### 1. Build
 
-Visit any newly created pages or components in dev mode first so their files are scaffolded, then run from the project root:
+A build does not scaffold source files. Visit new pages and render new components in dev mode first, then run from the project root:
 
 ```sh
 php folio build
 ```
 
-This renders all routable pages in every configured language into `dist/`, along with `index.html`, a default-language `404.html`, generated CSS/JS/images, and supported public assets (such as fonts and PDFs). PHP files, server configs, and symlinks are not copied.
+This renders all routable pages in every configured language into `storage/dist/`, including the home `index.html` and a default-language `404.html`. The output also contains generated CSS/JS/images and supported public assets (such as fonts and PDFs). PHP files, server configs, and symlinks are not copied.
 
-Builds always disable scaffolding and request caches. A successful build atomically replaces the previous Folio-generated `dist/`; a failed build leaves it intact. Keep all source edits outside `dist/`.
+Folio stages the build before replacing the previous output and refuses to overwrite an existing directory that it did not generate. Keep source edits outside `storage/dist/`.
 
 ### 2. Preview Locally
 
-Serve `dist/` as the web root (for example, with Python 3—not a build or deployment dependency):
+Serve `storage/dist/` as the web root:
 
 ```sh
-python3 -m http.server 8001 --bind 127.0.0.1 --directory "$PWD/dist"
+python3 -m http.server 8001 --bind 127.0.0.1 --directory "$PWD/storage/dist"
 ```
 
 Open [http://127.0.0.1:8001/](http://127.0.0.1:8001/). Do not open `index.html` directly or include `/dist` in the URL, as links and assets are root-relative.
 
 ### 3. Deploy
 
-Publish the **contents of `dist/`** at your domain or subdomain root (`index.html` at `/`). Use a host that supports directory indexes (e.g., `/work/floral/` → `work/floral/index.html`) and serves `404.html` with HTTP status 404.
+Publish the **contents of `storage/dist/`** at your domain or subdomain root (`index.html` at `/`). Use a host that supports directory indexes (e.g., `/work/floral/` → `work/floral/index.html`) and serves `404.html` with HTTP status 404.
 
-- **Cloudflare Pages:** Upload `dist/` via [Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/); root `404.html` is picked up automatically. Rebuild and redeploy after making changes.
+- **Cloudflare Pages:** Upload `storage/dist/` via [Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/); root `404.html` is picked up automatically. Rebuild and redeploy after making changes.
 - **Limitation:** PHP runs only at build time; pages requiring request-time PHP or dynamic endpoints will not work in static exports.
 
 ---

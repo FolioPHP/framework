@@ -89,9 +89,7 @@ namespace Framework\Core {
       Image::setRequestLang($lang);
       $repository = new PageRepository($config, $lang);
       $page = self::resolvePage($canonicalPath, $path, $repository);
-      if (($html = Renderer::getCached($config, $page)) === null) {
-        $html = Renderer::render($page);
-      }
+      $html = Renderer::getCached($config, $page) ?? Renderer::render($page);
 
       if ($config->backup) (new Backup($config))->check();
       return $html;

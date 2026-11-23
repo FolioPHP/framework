@@ -69,7 +69,6 @@ final class Component implements Stringable
 
     return self::$definitions[$name] = [
       'path' => $path,
-      'template' => "{$path}/template.php",
       'format' => $cfg['content_format'],
       'css' => Renderer::bundleDirAssets($files, 'css', $mode),
       'js' => Renderer::bundleDirAssets($files, 'js', $mode),
@@ -98,7 +97,7 @@ final class Component implements Stringable
   {
     $this->fields();
     Renderer::collectComponentAsset('css', $this->definition['css']);
-    $html = Renderer::renderTemplate($this->definition['template'], [
+    $html = Renderer::renderTemplate("{$this->definition['path']}/template.php", [
       ...Renderer::context($this->page),
       'component' => $this,
     ]);

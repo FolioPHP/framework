@@ -20,7 +20,6 @@ class Page
   private readonly ?int $order;
   private array $pageConfig;
   private array $templateConfig;
-  private bool $isCacheable;
   private bool $active = false;
 
   private ?array $loadedFields = null;
@@ -42,10 +41,14 @@ class Page
   public function pageFiles(): array { return $this->pageFiles; }
   public function templateFiles(): array { return $this->templateFiles; }
   public function repository(): PageRepository { return $this->repository; }
-  public function isCacheable(): bool { return $this->isCacheable; }
   public function isRoutable(): bool { return $this->routable; }
   public function isActive(): bool { return $this->active; }
   public function activate(): void { $this->active = true; }
+
+  public function isCacheable(): bool
+  {
+    return $this->projectConfig->caching && ($this->pageConfig['caching'] ?? true) === true;
+  }
 
   public function hasActiveChild(): bool
   {
@@ -77,7 +80,6 @@ class Page
     $this->pageConfig = Store::syncConfig("{$path}/config.php", $dev ? $this->buildConfigBlueprint() : [], $dev, $preloadedConfig);
     unset($this->pageConfig['id']);
 
-    $this->isCacheable = $projectConfig->caching && ($this->pageConfig['caching'] ?? true) === true;
     $this->templateConfig = $templateConfig;
     if (!($this instanceof Site)) {
       $defaults = $repository->site->pageConfig();

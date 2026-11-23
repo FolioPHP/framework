@@ -176,32 +176,34 @@ final class Image implements Stringable
     $generated = Store::filesMap($outputDir);
     $basename = pathinfo($this->sourcePath, PATHINFO_FILENAME);
 
-    if ($this->isSvg) {
-      $filename = "{$basename}_{$this->hash}.svg";
-      if (!isset($generated[$filename])) {
-        Store::checkWritePath("{$outputDir}/{$filename}");
-        if (!is_dir($outputDir)) mkdir($outputDir, 0755, true);
-        copy($this->sourcePath, "{$outputDir}/{$filename}");
-        Store::filesMap($outputDir, refresh: true);
-      }
-      return "/generated-images/{$filename}";
-    }
-
-    $format = self::$format;
-    $baseFilename = "{$basename}_{$this->width}x{$this->height}_{$this->quality}_{$this->hash}";
-
-    foreach (['avif', 'webp', 'jpeg'] as $ext) {
-      if (isset($generated["{$baseFilename}.{$ext}"])) {
-        return "/generated-images/{$baseFilename}.{$ext}";
-      }
-      if ($ext === $format) break;
-    }
+    $baseFilename = $this->isSvg
+      ? "{$basename}_{$this->hash}"
+      : "{$basename}_{$this->width}x{$this->height}_{$this->quality}_{$this->hash}";
+    // Reuse a higher-priority cached format even if this server cannot encode it.
+    $format = $this->isSvg ? 'svg' : array_find(
+      ['avif', 'webp', 'jpeg'],
+      static fn(string $extension) => $extension === self::$format || isset($generated["{$baseFilename}.{$extension}"]),
+    );
 
     $filename = "{$baseFilename}.{$format}";
+    if ($format !== null && isset($generated[$filename])) return "/generated-images/{$filename}";
+
     $outputPath = "{$outputDir}/{$filename}";
     Store::checkWritePath($outputPath);
     if (!is_dir($outputDir)) mkdir($outputDir, 0755, true);
 
+    if ($this->isSvg) {
+      copy($this->sourcePath, $outputPath);
+    } else {
+      $this->writeRaster($outputPath, $format);
+    }
+    Store::filesMap($outputDir, refresh: true);
+
+    return "/generated-images/{$filename}";
+  }
+
+  private function writeRaster(string $outputPath, ?string $format): void
+  {
     $sourceImage = match ($this->imageType) {
       IMAGETYPE_JPEG => imagecreatefromjpeg($this->sourcePath),
       IMAGETYPE_PNG => imagecreatefrompng($this->sourcePath),
@@ -238,9 +240,6 @@ final class Image implements Stringable
       'webp' => imagewebp($finalImage, $outputPath, $formatQuality),
       'jpeg' => imagejpeg($finalImage, $outputPath, $formatQuality),
     };
-    Store::filesMap($outputDir, refresh: true);
-
-    return "/generated-images/{$filename}";
   }
 
   public static function resolveFolder(string $basePath, string $folder): ?string
@@ -258,17 +257,12 @@ final class Image implements Stringable
 
   public static function scanImages(string $dir): array
   {
-    if (isset(self::$dirCache[$dir])) return self::$dirCache[$dir];
-
-    $files = [];
-    foreach (Store::filesMap($dir) as $entry => $full) {
-      $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
-      if (in_array($ext, self::EXTENSIONS, true) && is_file($full)) {
-        $files[] = $full;
-      }
-    }
-
-    return self::$dirCache[$dir] = $files;
+    return self::$dirCache[$dir] ??= array_values(array_filter(
+      Store::filesMap($dir),
+      static fn(string $fullPath, string|int $entry) =>
+        in_array(strtolower(pathinfo($entry, PATHINFO_EXTENSION)), self::EXTENSIONS, true) && is_file($fullPath),
+      ARRAY_FILTER_USE_BOTH,
+    ));
   }
 
   public static function load(string $filename, ?string $basePath = null): ?self

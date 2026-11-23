@@ -35,25 +35,21 @@ final class Content
   public function find(string $query): Collection|ContentItem|null
   {
     $query = mb_strtolower($query);
-    if (str_contains($query, '/')) {
-      [$type] = explode('/', $query, 2);
-      return $this->find($type)?->findById($query);
-    }
-
-    $type = $this->types[$query] ?? null;
-    return is_string($type) ? $this->types[$query] = $this->loadType($query, $type) : $type;
+    [$type] = explode('/', $query, 2);
+    $items = $this->types[$type] ?? null;
+    if (is_string($items)) $items = $this->types[$type] = $this->loadType($type, $items);
+    return $query === $type ? $items : $items?->findById($query);
   }
 
   private function loadType(string $type, string $typePath): Collection
   {
     $dev = $this->config->isDevMode;
     $format = Store::syncConfig("{$typePath}/config.php", ['data_format' => 'txt'], $dev)['data_format'];
-    $typeFiles = Store::filesMap($typePath);
 
     if ($dev) {
-      Store::loadFields($typePath, $this->lang, $format, $typeFiles, ['title' => $type], isTemplate: true);
-      $typeFiles = Store::filesMap($typePath, refresh: true);
+      Store::loadFields($typePath, $this->lang, $format, blueprint: ['title' => $type], isTemplate: true);
     }
+    $typeFiles = Store::filesMap($typePath, refresh: $dev);
 
     $items = [];
     foreach ($typeFiles as $entry => $fullPath) {
