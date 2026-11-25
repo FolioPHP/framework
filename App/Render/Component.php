@@ -6,6 +6,7 @@ namespace Framework\Render;
 use Framework\Core\Config;
 use Framework\Core\Store;
 use Framework\Page\Page;
+use InvalidArgumentException;
 use Stringable;
 
 final class Component implements Stringable
@@ -17,6 +18,7 @@ final class Component implements Stringable
   private array $definition;
   private array $allOverrides = [];
   private array $langOverrides = [];
+  private array $slotValues = [];
   private ?string $contentId = null;
   private ?array $fields = null;
 
@@ -87,6 +89,31 @@ final class Component implements Stringable
     return clone($this, ['allOverrides' => array_merge($this->allOverrides, $data), 'fields' => null]);
   }
 
+  public function slots(mixed ...$values): self
+  {
+    if (count($values) === 1 && is_array($values[0] ?? null)) $values = $values[0];
+    foreach ($values as $name => $value) {
+      if (!is_string($name) || $name === '') {
+        throw new InvalidArgumentException('Component slots require named values.');
+      }
+      if ($value !== null && !is_string($value) && !$value instanceof Stringable) {
+        throw new InvalidArgumentException("Component slot {$name} must be a string, Stringable, or null.");
+      }
+    }
+    return clone($this, ['slotValues' => array_replace($this->slotValues, $values)]);
+  }
+
+  public function slot(string $name, string|Stringable|null $value): self
+  {
+    return $this->slots([$name => $value]);
+  }
+
+  public function open(): void
+  {
+    $this->page->slotCapture()->open($this, $this->slotValues);
+    Renderer::collectComponentAsset('css', $this->definition['css']);
+  }
+
   public function fields(): array
   {
     $lang = $this->page->lang();
@@ -100,10 +127,36 @@ final class Component implements Stringable
     $html = Renderer::renderTemplate("{$this->definition['path']}/template.php", [
       ...Renderer::context($this->page),
       'component' => $this,
+      'slot' => $this->slotReader(),
     ]);
     Renderer::collectComponentAsset('js', $this->definition['js']);
 
     return $html;
+  }
+
+  private function slotReader(): object
+  {
+    return new class($this->slotValues) {
+      private array $resolved = [];
+
+      public function __construct(private readonly array $values) {}
+
+      public function __get(string $name): ?string
+      {
+        return $this(array_key_exists($name, $this->values) ? $name : str_replace('_', '-', $name));
+      }
+
+      public function __isset(string $name): bool { return $this->__get($name) !== null; }
+
+      public function __invoke(string $name = 'default'): ?string
+      {
+        if (!array_key_exists($name, $this->resolved)) {
+          $value = (string) ($this->values[$name] ?? '');
+          $this->resolved[$name] = mb_trim($value) === '' ? null : $value;
+        }
+        return $this->resolved[$name];
+      }
+    };
   }
 
   public function __get(string $name): mixed

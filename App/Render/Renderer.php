@@ -11,6 +11,7 @@ use Framework\Core\Store;
 use Framework\Page\Page;
 use Framework\Util\Minifier;
 use Framework\Util\PerformanceMonitor;
+use LogicException;
 
 final class Renderer
 {
@@ -42,20 +43,24 @@ final class Renderer
 
     // Phase 1: render body first so rendered components register their CSS/JS
     ob_start();
-    if ($pageConfig['show_header']) {
-      echo self::wrap('header', isset($pageFiles['header.php'])
-        ? self::renderTemplate($pageFiles['header.php'], $ctx)
-        : (string) $components->header);
+    try {
+      if ($pageConfig['show_header']) {
+        echo self::wrap('header', isset($pageFiles['header.php'])
+          ? self::renderTemplate($pageFiles['header.php'], $ctx)
+          : (string) $components->header);
+      }
+      if ($templateFile = $templateFiles['template.php'] ?? $pageFiles['template.php'] ?? null) {
+        echo self::wrap('main', self::renderTemplate($templateFile, $ctx));
+      }
+      if ($pageConfig['show_footer']) {
+        echo self::wrap('footer', isset($pageFiles['footer.php'])
+          ? self::renderTemplate($pageFiles['footer.php'], $ctx)
+          : (string) $components->footer);
+      }
+      $body = ob_get_contents();
+    } finally {
+      ob_end_clean();
     }
-    if ($templateFile = $templateFiles['template.php'] ?? $pageFiles['template.php'] ?? null) {
-      echo self::wrap('main', self::renderTemplate($templateFile, $ctx));
-    }
-    if ($pageConfig['show_footer']) {
-      echo self::wrap('footer', isset($pageFiles['footer.php'])
-        ? self::renderTemplate($pageFiles['footer.php'], $ctx)
-        : (string) $components->footer);
-    }
-    $body = ob_get_clean();
 
     // Phase 2: assemble <head> with collected assets in document order
     $esc = static fn(mixed $v): string => htmlspecialchars((string) $v, ENT_QUOTES);
@@ -110,6 +115,7 @@ final class Renderer
       'site' => $page->repository()->site,
       'content' => $page->repository()->content,
       'components' => $page->components(),
+      'slots' => $page->slotCapture(),
       'image' => Image::load(...),
       'gallery' => Gallery::load(...),
       'images' => self::assetLookup(static fn(string $name) => Image::load($name, $config->imagesPath)),
@@ -130,8 +136,17 @@ final class Renderer
   public static function renderTemplate(string $templateFile, array $context): string
   {
     ob_start();
-    self::includeTemplate($templateFile, $context);
-    return ob_get_clean();
+    $level = ob_get_level();
+    try {
+      self::includeTemplate($templateFile, $context);
+      if (ob_get_level() !== $level) {
+        throw new LogicException("Unclosed component block or unbalanced output buffer in {$templateFile}.");
+      }
+      return ob_get_contents();
+    } finally {
+      if (($context['slots'] ?? null) instanceof SlotCapture) $context['slots']->discardFrom($level);
+      while (ob_get_level() >= $level && ob_end_clean()) {}
+    }
   }
 
   private static function wrap(string $tag, string $content, string $indent = ''): string

@@ -339,6 +339,59 @@ Override values for specific languages:
 ?>
 ```
 
+### Slots
+
+Slots pass rendered content separately from `$component` fields. Use named arguments or an associative array with `->slots()`, or set one value with `->slot($name, $value)`. These methods return a new component and can be chained with field overrides. Values can be strings, `Stringable` objects (including images and components), or `null`.
+
+```php
+<?= $components->card('service-1')->slots(
+    header: '<h2>Services</h2>',
+    media: $image('hero')?->resize(width: 600),
+)->slot('footer', $components->button(['text' => 'Read more'])) ?>
+
+<?= $components->card->slots(['card-header' => '<h2>Services</h2>']) ?>
+```
+
+Use `->open()` and `$components->close()` to capture template output and render the component in place. Unmarked output goes to `default`. Use `$slots->name` or `$slots('name')` to switch slots, and `$slots->default` or `$slots()` to return to `default`:
+
+```php
+<?php $components->card('service-1')->open() ?>
+  <?php $slots->header ?>
+    <h2>Services</h2>
+  <?php $slots() ?>
+    <p>Explore our services.</p>
+  <?php $slots('footer') ?>
+    <?= $components->button(['text' => 'Read more']) ?>
+<?php $components->close() ?>
+```
+
+Alternatively, open and close a named slot explicitly. The matching `->close()` returns capture to `default`. Close the explicit slot before switching slots or closing its component. Component blocks can be nested inside any slot.
+
+```php
+<?php $components->card->open() ?>
+  <?php $slots->header->open() ?>
+    <h2>Services</h2>
+  <?php $slots->header->close() ?>
+  <p>Default body content.</p>
+<?php $components->close() ?>
+```
+
+Captured slots override matching inline slots. Revisiting a slot appends to its captured content. A selected but empty slot clears its inline value; implicit whitespace in `default` does not replace an inline default.
+
+In the component template, read slots with `$slot->name` or `$slot('name')`. Both return `null` for missing or whitespace-only content. Nonempty values are returned as rendered, without escaping. Property access prefers the exact name and otherwise falls back from underscores to hyphens, so `$slots->card_header` and `$slot->card_header` can target `card-header`. Use the callable form to specify an exact name.
+
+```php
+<article class="card">
+  <?php if ($slot->header): ?>
+    <header><?= $slot->header ?></header>
+  <?php endif; ?>
+  <div class="card-body"><?= $slot->default ?? $component->text ?></div>
+  <?php if ($slot('footer')): ?>
+    <footer><?= $slot('footer') ?></footer>
+  <?php endif; ?>
+</article>
+```
+
 ---
 
 ## Assets

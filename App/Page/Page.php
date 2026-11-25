@@ -10,6 +10,7 @@ use Framework\Core\Field;
 use Framework\Core\Store;
 use Framework\Render\Component;
 use Framework\Render\Renderer;
+use Framework\Render\SlotCapture;
 use Framework\Util\PerformanceMonitor;
 
 class Page
@@ -25,6 +26,7 @@ class Page
   private ?array $loadedFields = null;
   private string $dataFormat;
   private ?object $components = null;
+  private ?SlotCapture $slotCapture = null;
 
   public function &fields(): array
   {
@@ -159,9 +161,23 @@ class Page
   {
     return $this->components ??= new readonly class($this) {
       public function __construct(private Page $page) {}
-      public function __call(string $name, array $args): Component { return new Component($this->page, $name, $args[0] ?? null); }
+
+      public function __call(string $name, array $args): ?Component
+      {
+        if ($name === 'close' && $args === []) {
+          $this->page->slotCapture()->close();
+          return null;
+        }
+        return new Component($this->page, $name, $args[0] ?? null);
+      }
+
       public function __get(string $name): Component { return new Component($this->page, $name); }
     };
+  }
+
+  public function slotCapture(): SlotCapture
+  {
+    return $this->slotCapture ??= new SlotCapture();
   }
 
   public function children(?int $limit = null): Collection
